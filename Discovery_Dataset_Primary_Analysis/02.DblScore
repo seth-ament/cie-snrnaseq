@@ -1,0 +1,34 @@
+module load sge
+qlogin -P sament-lab -l mem_free=30G -q interactive.q
+conda activate /local/projects-t3/idea/ewild/software/Rlib/r_4_0
+
+R
+
+# Libraries
+library( Seurat )
+library(ggplot2)
+library(cowplot)
+library(tidyverse)
+library(stringr)
+theme_set(theme_cowplot())
+library(scDblFinder)
+
+setwd("/local/projects-t3/idea/ewild/etoh/Data_2023")
+
+obj <- readRDS('seuratObjs.rds' )
+
+n = length(obj.list)
+
+for( i in 1:n ) {
+
+  sce = as.SingleCellExperiment( obj.list[[i]] )
+
+  sce  = scDblFinder( sce )
+
+  obj.list[[i]]$scDblFinder.score = sce$scDblFinder.score
+
+  obj.list[[i]]$scDblFinder.class = sce$scDblFinder.class
+
+}
+
+saveRDS( obj.list , file = 'seuratObjs_dblScore.rds' )

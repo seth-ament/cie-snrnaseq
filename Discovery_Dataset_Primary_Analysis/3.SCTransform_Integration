@@ -1,0 +1,28 @@
+library( Seurat )
+setwd("/local/projects-t3/idea/ewild/etoh/Data_2023/postCellbinder")
+
+objs = readRDS("/autofs/burnsfs/projects-t3/idea/ewild/etoh/Data_2023/seuratObjs_dblScore.rds")
+
+objs = lapply(X = objs , FUN = SCTransform)
+
+features <- SelectIntegrationFeatures(
+  object.list = objs ,
+  nfeatures = 3000)
+
+objs <- PrepSCTIntegration(
+  object.list = objs ,
+  anchor.features = features)
+
+anchors <- FindIntegrationAnchors(
+  object.list = objs ,
+  normalization.method = "SCT",
+  anchor.features = features)
+
+combined.sct <- IntegrateData(
+  anchorset = anchors ,
+  normalization.method = "SCT")
+
+saveRDS( combined.sct , file = 'combined.sct_rmdbl.rds' )
+
+file.copy(from = "/autofs/burnsfs/projects-t3/idea/ewild/etoh/Data_2023/postCellbinder/combined.sct_rmdbl.rds",
+          to   = "/autofs/burnsfs/projects-t3/idea/ewild/etoh/Data_2023/combined.sct_rmdbl.rds")

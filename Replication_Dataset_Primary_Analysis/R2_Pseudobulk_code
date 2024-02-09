@@ -1,0 +1,353 @@
+
+load("/local/projects-t3/idea/ewild/etoh/etoh_obj.new/etoh_obj.new_FinalClusters.Rdata")
+obj <- obj.new
+
+batch = rep( 1 , ncol(obj) )
+batch[ obj$sample_name %in% c('EtOH_Rep2','Ctrl_Rep2') ] = 2
+
+obj = AddMetaData( obj , batch , 'Batch' )
+
+Idents(obj) = obj$Batch
+obj <- subset(obj, Batch == "2")
+
+
+meta = obj@meta.data
+meta$donor_id = factor( paste( meta$sample_number , meta$Sex ,  meta$trt, sep = "_") )
+obj$donor_id = meta$donor_id
+
+Idents(obj) = obj$major_type
+
+DefaultAssay(obj) = 'RNA'
+
+types = levels(obj)
+
+elist = list()
+
+donors = unique( obj$donor_id )
+
+for( i in 1:length(types) ) {
+  cat( types[i] , '\n' )
+  expr = matrix( 0 , ncol = length(donors) , nrow = nrow(obj) )
+  sub = subset( obj , idents = types[i] )
+  for( j in 1:length(donors) ) {
+    idx = which( sub$donor_id == donors[j] )
+    if(length(idx)==0) next
+    sub.j = subset( sub , cells = idx )
+    expr[,j] = rowSums( GetAssayData( sub.j , slot = 'counts' ) )
+    rownames(expr) = rownames(obj)
+    colnames(expr) = donors
+  }
+  elist[[i]] = expr
+}
+
+names(elist) = types
+
+saveRDS( elist , file = 'etoh_objnew_pseudobulk_counts.rds')
+
+counts = elist
+
+colData = data.frame(samples = colnames(counts$OL))
+colData$trt = c("B", "B", "A", "A")
+colData$sex_numeric = c("1", "2", "2", "1")
+
+# A = Cntl
+# B = EtOH
+
+# counts$Oligo    counts$dSPN     counts$Poly     counts$IN-PV    counts$Ependy
+# counts$iSPN     counts$Endo     counts$MG       counts$IN-SST
+# counts$Astro    counts$eSPN     counts$Mural    counts$IN-CHAT
+
+
+rownames(colData) = colnames(counts$Oligo) = colData$sample_id
+
+### Need to do each of the celltype counts separately ###
+
+############## OLIGO ############
+y <- DGEList(counts=counts$OL,group=colData$sample_id)
+y <- calcNormFactors(y)
+design <-  model.matrix(~0+colData$trt + colData$sex_numeric)
+y <- estimateDisp(y, design)
+fit <- glmQLFit(y, design)
+
+# trt DEGs
+qlf <- glmQLFTest(fit, contrast=c(-1,1,0))
+## B-A
+## EtOH - Control
+## + indicates more highly expressed in ETOH
+## - indicates more highly expressed in Ctrol
+topTags(qlf)
+res = as.data.frame( topTags( qlf , n = Inf , sort.by = 'none' ) )
+res = res[ order( res$PValue ) , ]
+
+save( res , file ='EtOH_B3_pseudobulk_oligo_qlf_degs.rdata' )
+write.csv(res, file = "EtOH_B3_pseudobulk_oligo_qlf_degs.csv")
+
+############## dSPN ############
+y <- DGEList(counts=counts$dSPN,group=colData$sample_id)
+y <- calcNormFactors(y)
+design <-  model.matrix(~0+colData$trt + colData$sex_numeric)
+y <- estimateDisp(y, design)
+fit <- glmQLFit(y, design)
+
+# trt DEGs
+qlf <- glmQLFTest(fit, contrast=c(-1,1,0))
+## B-A
+## EtOH - Control
+## + indicates more highly expressed in ETOH
+## - indicates more highly expressed in Ctrol
+topTags(qlf)
+res = as.data.frame( topTags( qlf , n = Inf , sort.by = 'none' ) )
+res = res[ order( res$PValue ) , ]
+
+save( res , file ='EtOH_B3_pseudobulk_dSPN_qlf_degs.rdata' )
+write.csv(res, file = "EtOH_B3_pseudobulk_dSPN_qlf_degs.csv")
+
+############## iSPN ############
+y <- DGEList(counts=counts$iSPN,group=colData$sample_id)
+y <- calcNormFactors(y)
+design <-  model.matrix(~0+colData$trt + colData$sex_numeric)
+y <- estimateDisp(y, design)
+fit <- glmQLFit(y, design)
+
+# trt DEGs
+qlf <- glmQLFTest(fit, contrast=c(-1,1,0))
+## B-A
+## EtOH - Control
+## + indicates more highly expressed in ETOH
+## - indicates more highly expressed in Ctrol
+topTags(qlf)
+res = as.data.frame( topTags( qlf , n = Inf , sort.by = 'none' ) )
+res = res[ order( res$PValue ) , ]
+
+save( res , file ='EtOH_B3_pseudobulk_ispn_qlf_degs.rdata' )
+write.csv(res, file = "EtOH_B3_pseudobulk_ispn_qlf_degs.csv")
+
+############## POLY ############
+y <- DGEList(counts=counts$OPC,group=colData$sample_id)
+y <- calcNormFactors(y)
+design <-  model.matrix(~0+colData$trt + colData$sex_numeric)
+y <- estimateDisp(y, design)
+fit <- glmQLFit(y, design)
+
+# trt DEGs
+qlf <- glmQLFTest(fit, contrast=c(-1,1,0))
+## B-A
+## EtOH - Control
+## + indicates more highly expressed in ETOH
+## - indicates more highly expressed in Ctrol
+topTags(qlf)
+res = as.data.frame( topTags( qlf , n = Inf , sort.by = 'none' ) )
+res = res[ order( res$PValue ) , ]
+
+save( res , file ='EtOH_B3_pseudobulk_poly_qlf_degs.rdata' )
+write.csv(res, file = "EtOH_B3_pseudobulk_poly_qlf_degs.csv")
+
+############## IN-PV ############
+y <- DGEList(counts=counts$'IN-PV',group=colData$sample_id)
+y <- calcNormFactors(y)
+design <-  model.matrix(~0+colData$trt + colData$sex_numeric)
+y <- estimateDisp(y, design)
+fit <- glmQLFit(y, design)
+
+# trt DEGs
+qlf <- glmQLFTest(fit, contrast=c(-1,1,0))
+## B-A
+## EtOH - Control
+## + indicates more highly expressed in ETOH
+## - indicates more highly expressed in Ctrol
+topTags(qlf)
+res = as.data.frame( topTags( qlf , n = Inf , sort.by = 'none' ) )
+res = res[ order( res$PValue ) , ]
+
+save( res , file ='EtOH_B3_pseudobulk_pv_qlf_degs.rdata' )
+write.csv(res, file = "EtOH_B3_pseudobulk_pv_qlf_degs.csv")
+
+
+############## EPENDY ############
+y <- DGEList(counts=counts$Ependyma,group=colData$sample_id)
+y <- calcNormFactors(y)
+design <-  model.matrix(~0+colData$trt + colData$sex_numeric)
+y <- estimateDisp(y, design)
+fit <- glmQLFit(y, design)
+
+# trt DEGs
+qlf <- glmQLFTest(fit, contrast=c(-1,1,0))
+## B-A
+## EtOH - Control
+## + indicates more highly expressed in ETOH
+## - indicates more highly expressed in Ctrol
+topTags(qlf)
+res = as.data.frame( topTags( qlf , n = Inf , sort.by = 'none' ) )
+res = res[ order( res$PValue ) , ]
+
+save( res , file ='EtOH_B3_pseudobulk_ependy_qlf_degs.rdata' )
+write.csv(res, file = "EtOH_B3_pseudobulk_ependy_qlf_degs.csv")
+
+
+# counts$iSPN     counts$Endo     counts$MG       counts$IN-SST
+# counts$Astro    counts$eSPN     counts$Mural    counts$IN-CHAT
+
+
+############## ENDO ############
+y <- DGEList(counts=counts$Endo,group=colData$sample_id)
+y <- calcNormFactors(y)
+design <-  model.matrix(~0+colData$trt + colData$sex_numeric)
+y <- estimateDisp(y, design)
+fit <- glmQLFit(y, design)
+
+# trt DEGs
+qlf <- glmQLFTest(fit, contrast=c(-1,1,0))
+## B-A
+## EtOH - Control
+## + indicates more highly expressed in ETOH
+## - indicates more highly expressed in Ctrol
+topTags(qlf)
+res = as.data.frame( topTags( qlf , n = Inf , sort.by = 'none' ) )
+res = res[ order( res$PValue ) , ]
+
+save( res , file ='EtOH_B3_pseudobulk_endo_qlf_degs.rdata' )
+write.csv(res, file = "EtOH_B3_pseudobulk_endo_qlf_degs.csv")
+
+############## MG ############
+y <- DGEList(counts=counts$MG,group=colData$sample_id)
+y <- calcNormFactors(y)
+design <-  model.matrix(~0+colData$trt + colData$sex_numeric)
+y <- estimateDisp(y, design)
+fit <- glmQLFit(y, design)
+
+# trt DEGs
+qlf <- glmQLFTest(fit, contrast=c(-1,1,0))
+## B-A
+## EtOH - Control
+## + indicates more highly expressed in ETOH
+## - indicates more highly expressed in Ctrol
+topTags(qlf)
+res = as.data.frame( topTags( qlf , n = Inf , sort.by = 'none' ) )
+res = res[ order( res$PValue ) , ]
+
+save( res , file ='EtOH_B3_pseudobulk_mg_qlf_degs.rdata' )
+write.csv(res, file = "EtOH_B3_pseudobulk_mg_qlf_degs.csv")
+
+############## IN-SST ############
+y <- DGEList(counts=counts$'IN-Sst',group=colData$sample_id)
+y <- calcNormFactors(y)
+design <-  model.matrix(~0+colData$trt + colData$sex_numeric)
+y <- estimateDisp(y, design)
+fit <- glmQLFit(y, design)
+
+# trt DEGs
+qlf <- glmQLFTest(fit, contrast=c(-1,1,0))
+## B-A
+## EtOH - Control
+## + indicates more highly expressed in ETOH
+## - indicates more highly expressed in Ctrol
+topTags(qlf)
+res = as.data.frame( topTags( qlf , n = Inf , sort.by = 'none' ) )
+res = res[ order( res$PValue ) , ]
+
+save( res , file ='EtOH_B3_pseudobulk_sst_qlf_degs.rdata' )
+write.csv(res, file = "EtOH_B3_pseudobulk_sst_qlf_degs.csv")
+
+
+
+# counts$Astro    counts$eSPN     counts$Mural    counts$IN-CHAT
+
+
+
+############## ASTRO ############
+y <- DGEList(counts=counts$AS,group=colData$sample_id)
+y <- calcNormFactors(y)
+design <-  model.matrix(~0+colData$trt + colData$sex_numeric)
+y <- estimateDisp(y, design)
+fit <- glmQLFit(y, design)
+
+# trt DEGs
+qlf <- glmQLFTest(fit, contrast=c(-1,1,0))
+## B-A
+## EtOH - Control
+## + indicates more highly expressed in ETOH
+## - indicates more highly expressed in Ctrol
+topTags(qlf)
+res = as.data.frame( topTags( qlf , n = Inf , sort.by = 'none' ) )
+res = res[ order( res$PValue ) , ]
+
+save( res , file ='EtOH_B3_pseudobulk_astro_qlf_degs.rdata' )
+write.csv(res, file = "EtOH_B3_pseudobulk_astro_qlf_degs.csv")
+
+
+############## eSPN ############
+y <- DGEList(counts=counts$eSPN,group=colData$sample_id)
+y <- calcNormFactors(y)
+design <-  model.matrix(~0+colData$trt + colData$sex_numeric)
+y <- estimateDisp(y, design)
+fit <- glmQLFit(y, design)
+
+# trt DEGs
+qlf <- glmQLFTest(fit, contrast=c(-1,1,0))
+## B-A
+## EtOH - Control
+## + indicates more highly expressed in ETOH
+## - indicates more highly expressed in Ctrol
+topTags(qlf)
+res = as.data.frame( topTags( qlf , n = Inf , sort.by = 'none' ) )
+res = res[ order( res$PValue ) , ]
+
+save( res , file ='EtOH_B3_pseudobulk_eSPN_qlf_degs.rdata' )
+write.csv(res, file = "EtOH_B3_pseudobulk_eSPN_qlf_degs.csv")
+
+
+############## IN-CHAT ############
+y <- DGEList(counts=counts$'IN-Chat',group=colData$sample_id)
+y <- calcNormFactors(y)
+design <-  model.matrix(~0+colData$trt + colData$sex_numeric)
+y <- estimateDisp(y, design)
+fit <- glmQLFit(y, design)
+
+# trt DEGs
+qlf <- glmQLFTest(fit, contrast=c(-1,1,0))
+## B-A
+## EtOH - Control
+## + indicates more highly expressed in ETOH
+## - indicates more highly expressed in Ctrol
+topTags(qlf)
+res = as.data.frame( topTags( qlf , n = Inf , sort.by = 'none' ) )
+res = res[ order( res$PValue ) , ]
+
+save( res , file ='EtOH_B3_pseudobulk_chat_qlf_degs.rdata' )
+write.csv(res, file = "EtOH_B3_pseudobulk_chat_qlf_degs.csv")
+
+
+###################### Make Degs Masterfile ##################
+
+oligo = read_csv("EtOH_B3_pseudobulk_oligo_qlf_degs.csv")
+ispn = read_csv("EtOH_B3_pseudobulk_ispn_qlf_degs.csv")
+poly = read_csv("EtOH_B3_pseudobulk_poly_qlf_degs.csv")
+pv = read_csv("EtOH_B3_pseudobulk_pv_qlf_degs.csv")
+ependy = read_csv("EtOH_B3_pseudobulk_ependy_qlf_degs.csv")
+ispn = read_csv("EtOH_B3_pseudobulk_ispn_qlf_degs.csv")
+endo = read_csv("EtOH_B3_pseudobulk_endo_qlf_degs.csv")
+mg = read_csv("EtOH_B3_pseudobulk_mg_qlf_degs.csv")
+sst = read_csv("EtOH_B3_pseudobulk_sst_qlf_degs.csv")
+astro = read_csv("EtOH_B3_pseudobulk_astro_qlf_degs.csv")
+espn = read_csv("EtOH_B3_pseudobulk_eSPN_qlf_degs.csv")
+chat = read_csv("EtOH_B3_pseudobulk_chat_qlf_degs.csv")
+dspn = read_csv("EtOH_B3_pseudobulk_dSPN_qlf_degs.csv")
+
+## Add a celltype column
+oligo$celltype = 'oligo'
+ispn$celltype = 'ispn'
+dspn$celltype = 'dspn'
+poly$celltype = 'poly'
+pv$celltype = 'pv'
+ependy$celltype = 'ependy'
+ispn$celltype = 'ispn'
+endo$celltype = 'endo'
+mg$celltype = 'mg'
+sst$celltype = 'sst'
+astro$celltype = 'astro'
+espn$celltype = 'espn'
+chat$celltype = 'chat'
+
+degs = rbind(oligo, ispn, poly, pv, ependy, dspn, endo, mg, sst, astro, espn, chat, espn)
+
+write.csv(degs, file = "degs_alra_masterfile_EtOH_objnew_B2only_pseudobulk.csv")

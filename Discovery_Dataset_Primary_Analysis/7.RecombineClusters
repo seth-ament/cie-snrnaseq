@@ -1,0 +1,66 @@
+
+R
+library(Seurat)
+library(tidyverse)
+library(ggplot2)
+library(cowplot)
+library(stringr)
+theme_set(theme_cowplot())
+
+setwd("/local/projects-t3/idea/ewild/etoh/Data_2023/noCellbender/rmdbl/rmdbl_QC/RecombineClusters")
+
+other = readRDS( "/autofs/burnsfs/projects-t3/idea/ewild/etoh/Data_2023/noCellbender/rmdbl/rmdbl_QC/other_clustering/other_clustering.rds" )
+neuron = readRDS( "/autofs/burnsfs/projects-t3/idea/ewild/etoh/Data_2023/noCellbender/rmdbl/rmdbl_QC/neuron_clustering/neuron_clustering.rds" )
+
+other_sub = subset (other, subset = major_type == c("Oligo", "Endo", "MG", "Mural", "Ependy", "Astro", "Poly_astro"))
+neuron_sub = subset(neuron, subset = major_type == c("dSPN", "iSPN", "eSPN", "IN-CHAT", "IN-SST", "IN-PV"))
+
+## So you don't actually need to merge these.... you just need to assign major type based on these and then drop the remainder from the dataset
+## I feel like I have done this before -- let's find the code!
+## 12.15.21 REplaicng eSPN and IN CLuster in original obj
+
+Idents(obj) = onj$major_type
+
+
+
+
+metadata = obj.full@meta.data
+
+metadata <- metadata %>%
+      mutate(major_type_trans = paste(major_type_neuron, major_type_other, sep=", "))
+
+metadata <- metadata %>%
+   mutate(major_type = major_type_trans)
+
+   metadata$major_type <- recode(metadata$major_type, 'NA, NA'="drop", 'dSPN, NA'= "dSPN", "iSPN, NA" = "iSPN", "IN-CHAT, NA" = "IN-CHAT", "IN-SST, NA" = "IN-SST")
+   metadata$major_type <- recode(metadata$major_type, 'eSPN, NA'="eSPN", 'IN-PV, NA'="IN-PV")
+
+   metadata$major_type <- recode(metadata$major_type,
+"NA, Oligo" = "Oligo",
+"NA, Astro" = "Astro",
+"NA, Poly_astro" = "Poly",
+"NA, Endo" = "Endo",
+"NA, MG" = "MG",
+"NA, Mural" = "Mural",
+"NA, Ependy" = "Ependy")
+
+
+metadata$major_type <- recode(metadata$major_type,
+"IN-Intermediate_kit, NA" = "IN-Intermediate_kit",
+"NA, MG_light" = "MG_light",
+"NA, Vxn_1" = "Vxn",
+"NA, Endo_Mural" = "Endo_Mural",
+"IN-Intermediate_sst, NA" = "IN-Intermediate_sst",
+"NA, Astro_rorb" = "Astro_rorb",
+"eSPN_drd2, NA" = "eSPN_drd2",
+"NA, Vxn_2" = "Vxn",
+"NA, Astro_MG"      = "Astro_MG",
+"NA, Oligo_MG" = "Oligo_MG",
+"NA, Astro_Oligo"        = "Astro_Oligo",
+"NA, Astro_slc" = "Astro_slc",
+"NA, Astro_MG_Poly" = "Astro_MG_Poly")
+
+
+obj.full$major_type = metadata$major_type
+
+saveRDS(obj.full, "etoh_nocb_rmdbl_NeuronOtherCluster_Recombined.rds")

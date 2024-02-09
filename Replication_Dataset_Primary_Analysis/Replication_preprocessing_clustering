@@ -1,0 +1,363 @@
+# Integrate
+library( Seurat )
+
+# load data
+
+etoh1 = Read10X('/local/projects-t3/idea/sament/etoh/CellRanger/Mo_C57B6_Test_EthanolVapor/ESA10_20200918_A00904_IL100160177/outs/filtered_feature_bc_matrix')
+etoh1 = CreateSeuratObject( etoh1 )
+
+ctrl1 = Read10X('/local/projects-t3/idea/sament/etoh/CellRanger/Mo_C57B6_Control_WaterVapor/ESA10_20200918_A00904_IL100160176/outs/filtered_feature_bc_matrix')
+ctrl1 = CreateSeuratObject( ctrl1 )
+
+etoh2 = Read10X('/local/projects-t3/idea/sament/etoh/CellRanger/Mo_C57B6_ETOHVap_Pool_M_F_DorStr_Nuclei_NCellPlex_303_304_307_308/multi/outs/multi/count/raw_feature_bc_matrix')
+sel = read.csv('/local/projects-t3/idea/sament/etoh/CellRanger/Mo_C57B6_ETOHVap_Pool_M_F_DorStr_Nuclei_NCellPlex_303_304_307_308/multi/outs/multi/multiplexing_analysis/assignment_confidence_table.csv')
+etoh2 = CreateSeuratObject( etoh2[[1]] )
+etoh2 = subset( etoh2 , cells = sel$Barcodes )
+
+ctrl2 = Read10X('/local/projects-t3/idea/sament/etoh/CellRanger/Mo_C57B6_Ctl_H20Vap_Pool_M_F_DorStri_Nuclei_NCellPlex301_302_305_306/ANALYSIS/outs/multi/count/raw_feature_bc_matrix')
+sel2 = read.csv('/local/projects-t3/idea/sament/etoh/CellRanger/Mo_C57B6_Ctl_H20Vap_Pool_M_F_DorStri_Nuclei_NCellPlex301_302_305_306/ANALYSIS/outs/multi/multiplexing_analysis/assignment_confidence_table.csv')
+ctrl2 = CreateSeuratObject( ctrl2[[1]] )
+ctrl2 = subset( ctrl2 , cells = sel2$Barcodes )
+
+obj.list = list( etoh1 , ctrl1 , etoh2 , ctrl2 )
+
+obj.list <- lapply(X = obj.list, FUN = function(x) {
+    x <- NormalizeData(x)
+    x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
+})
+
+# integrate
+
+features <- SelectIntegrationFeatures(object.list = obj.list)
+
+anchors <- FindIntegrationAnchors(object.list = obj.list,
+				  anchor.features = features)
+obj <- IntegrateData(anchorset = anchors)
+
+DefaultAssay(obj) <- "integrated"
+
+# Run the standard workflow for visualization and clustering
+obj <- ScaleData( obj, verbose = FALSE)
+obj <- RunPCA( obj, npcs = 30, verbose = FALSE)
+obj <- RunUMAP( obj, reduction = "pca", dims = 1:30)
+obj <- FindNeighbors( obj , reduction = "pca", dims = 1:30)
+obj <- FindClusters( obj , resolution = 0.5)
+
+# add meta
+sample_number = gsub( '(.*)\\_','',colnames(obj) )
+sample_name = sample_number
+sample_name[ sample_number == 1 ] = 'EtOH_Rep1'
+sample_name[ sample_number == 2 ] = 'Ctrl_Rep1'
+sample_name[ sample_number == 3 ] = 'EtOH_Rep2'
+sample_name[ sample_number == 4 ] = 'Ctrl_Rep2'
+trt = gsub( '\\_(.*)' , '' , sample_name )
+
+obj = AddMetaData( obj , metadata = sample_number , col.name = 'sample_number' )
+obj = AddMetaData( obj , metadata = sample_name , col.name = 'sample_name' )
+obj = AddMetaData( obj , metadata = trt , col.name = 'trt' )
+
+pdf('integrated.umaps.pdf')
+DimPlot( obj , reduction = 'umap' , group.by = 'sample_name' )
+DimPlot( obj , reduction = 'umap' , label = T )
+dev.off()
+
+table( Idents(obj) , obj$sample_name )
+
+genes = c('Mobp','Pdgfra','C1qa','Slc1a2','Adora2a','Drd1','Kit','Sst','Chat')
+
+DefaultAssay(obj) = 'RNA'
+pdf('integrated.markers.umap.pdf')
+FeaturePlot( obj , features = genes , combine = F , label = T )
+dev.off()
+
+saveRDS( obj , file = 'Mm.STR.EtOH.StandardWorkflow.rds' )
+
+
+# Find Markers
+library( Seurat )
+
+obj = readRDS('Mm.STR.EtOH.StandardWorkflow.rds')
+
+markers = FindAllMarkers( obj , only.pos = T )
+
+write.csv( markers , file = 'Mm.STR.EtOH.StandardWorkflow.markers.csv' )
+
+
+# Label Clusters and Filter
+library( Seurat )
+
+obj = readRDS('Mm.STR.EtOH.StandardWorkflow.rds')
+
+markers = read.csv('Mm.STR.EtOH.StandardWorkflow.markers.csv',row.names=1)
+
+cluster.ids = c(
+  'SPN_Drd1_Ebf1', #0 Ebf1
+  'SPN_Drd2', #1 Drd2, Penk
+  'OL' , #2 Mog
+  'AS' , #3 Slc1a2
+  'Neuron_Tshz2_Grik1', #4 Tshz2, Grik1
+  'SPN_Drd1_Pdyn_Sema5b' , #5
+  'Neuron_Satb2_C1ql3' , #6 , mostly batch 1
+  'SPN_Drd1_Pde10a' , #7
+  'Doublet_Neuron_Slc1a2' , #8 , mostly batch 1
+  'Damaged_Doublet' , #9 , mostly Batch 1
+  'SPN_Drd2_Tll1' , #10
+  'MG' , #11 C1qc, Cx3cr1
+  'IN-Sst' , #12 , Nos1 , Sst , etc.
+  'OPC' , #13 Pdgfra
+  'eSPN_Otof' , #14
+  'IN-PV_Kit' , #15 Kit
+  'eSPN_Tshz1' , #16
+  'Neuron_Satb2_Oprk1' , #17 mostly Batch 1
+  'IN-Chat' , #18
+  'Endothelial_Flt1', #19 Flt1
+  'Fibro_Mural' , #20 Vtn , Cped1
+  'Endothelial_Flt3' , #21 Flt3 , Lef1
+  'IN-PV_Pvalb_Nr2f2' , #22
+  'Ependyma' ) #23 Dnah12
+
+cluster.ids = data.frame( id = 0:23 , type = cluster.ids )
+cluster.ids$major_type = c(
+  'dSPN','iSPN','OL','AS','Cortical','dSPN','Cortical','dSPN','Doublet',
+  'Damaged','iSPN','MG','IN-Sst','OPC','eSPN','IN-PV','eSPN','Cortical',
+  'IN-Chat','Endo','Mural','Endo','Cortical','Ependyma' )
+
+type = rep( NA , ncol(obj) )
+major_type = rep( NA , ncol(obj) )
+for( i in 0:23 ) {
+  type[ Idents(obj) == i ] = cluster.ids$type[ i+1 ]
+  major_type[ Idents(obj) == i ] = cluster.ids$major_type[ i+1 ]
+}
+
+obj@meta.data$type = type
+obj@meta.data$major_type = major_type
+
+# ratio across batches
+
+by_sample = as.matrix( table( Idents(obj) , obj$sample_name ))
+by_batch = data.frame(
+  batch1 = rowSums( by_sample[,c(1,3)] ) ,
+  batch2 = rowSums( by_sample[,c(2,4)] ) )
+
+or = p = rep(NA,nrow(by_batch))
+for( i in 1:nrow(by_batch) ) {
+  m = matrix(
+  c( by_batch[i,1] , by_batch[i,2] ,
+     sum(by_batch[-i,1]) , sum(by_batch[-i,2]) ) ,
+  2,2)
+  test = fisher.test( m )
+  or[i] = test$estimate
+  p[i] = test$p.value
+}
+outp = cbind( by_batch , or , p )
+
+# batch1-specific clusters seem to be mostly cortical contamination
+rownames(outp)[ outp$or > 3 ]
+# "6"  "8"  "17" "21" "22"
+
+# drop clusters with evidence of being doublets, damaged, or contamination
+
+drop = c(4,6,8,9,17,21,22)
+clean = subset( obj , idents = drop , invert = T )
+
+saveRDS( obj , file = 'Mm.STR.EtOH.StandardWorkflow.Annoated.rds')
+
+saveRDS( clean , file = 'Mm.STR.EtOH.StandardWorkflow.Clean.rds')
+
+
+# Find Sex Specific Genes
+library( biomaRt )
+
+langfelder = read.delim('/local/projects/idea/sament2/htt/snrnaseq/langfelder/GSE65774_Striatum_mRNA_FPKM_processedData.txt.gz')
+
+counts = read.delim('/local/projects/idea/sament2/htt/snrnaseq/langfelder/GSE65774_Striatum_mRNA_counts_processedData.txt.gz')
+
+colmeta = readRDS('/local/projects/idea/sament2/htt/snrnaseq/langfelder/colmeta.rds')
+
+lang = langfelder[ , rownames(colmeta) ]
+rownames(lang) = counts[,1]
+
+# anno
+
+mart = useMart( 'ensembl' )
+mart = useDataset( mart = mart , 'mmusculus_gene_ensembl' )
+anno = getBM( mart = mart , attributes = c('ensembl_gene_id','mgi_symbol') )
+
+
+library( limma )
+
+design = model.matrix( ~ 0 + sex + age + genotype , data = colmeta )
+
+fit = lmFit( lang , design = design )
+fit = contrasts.fit( fit , c(-1,1,0,0,0,0,0,0,0) )
+fit = eBayes( fit , trend = T )
+res = topTable( fit , coef = 1 , number = Inf )
+res = merge( anno , res , by.x = 1 , by.y = 0 )
+res = res[ order( res$P.Value ) , ]
+
+saveRDS( res , file = 'Langfelder.sex_differences_in_mouse_striatum.rds' )
+
+
+
+# male-specific
+male = c('Eif2s3y','Ddx3y','Uty','Kdm5d','Uba1y')
+female = c('Xist','Eif2s3x','Kdm6a','Ddx3x','Jpx')
+
+
+# Sex Scoring
+library( Seurat )
+
+obj = readRDS('Mm.STR.EtOH.StandardWorkflow.Clean.rds')
+
+sex_diff = readRDS('Langfelder.sex_differences_in_mouse_striatum.rds')
+
+male = c('Eif2s3y','Ddx3y','Uty','Kdm5d','Uba1y')
+female = c('Xist','Eif2s3x','Kdm6a','Ddx3x','Jpx')
+
+features = sex_diff$mgi_symbol[1:50]
+
+sex.object = subset( obj , features = features )
+
+expr = GetAssayData( sex.object )
+sex.clust = kmeans( t(as.matrix(expr)) , centers = 2 )$cluster
+alignment = sign( cor( expr['Xist',] , sex.clust  ))
+sex = rep('Male',length(sex.clust))
+if( alignment == 1 ) sex[ which( sex.clust == 2 ) ] = 'Female'
+if( alignment == -1 ) sex[ which( sex.clust == 1 ) ] = 'Female'
+
+obj = AddMetaData( obj , sex , 'Sex' )
+
+pdf('sex_score.pdf')
+VlnPlot( obj , group.by = 'Sex' , features = c(female,male) ,
+	pt.size = 0 )
+dev.off()
+
+pdf('sex_score.pdf')
+VlnPlot( sex.object , features = 'PC1' , pt.size = 0 )
+VlnPlot( sex.object , features = c(male,female) , pt.size = 0 , combine = F )
+dev.off()
+
+saveRDS( obj , file = 'Mm.STR.EtOH.StandardWorkflow.Clean.WithSex.rds')
+
+
+
+
+
+# Reclustering INs (11.16.21)
+
+obj <- readRDS("/local/projects-t3/idea/ewild/etoh/integrate/Mm.STR.EtOH.StandardWorkflow.Clean.WithSex.rds")
+batch = rep( 1 , ncol(obj) )
+batch[ obj$sample_name %in% c('EtOH_Rep2','Ctrl_Rep2') ] = 2
+obj = AddMetaData( obj , batch , 'Batch' )
+
+# Subset celltypes of interest
+obj.full = obj
+Idents(obj) = "major_type"
+obj.sub = subset(x=obj,idents=c('eSPN','IN-PV', 'IN-Chat', 'IN-Sst'))
+
+# Find Variable Features
+obj.sub <- FindVariableFeatures(obj.sub, selection.method = "vst", nfeatures = 2000)
+# Scaling the data
+all.genes <- rownames(obj.sub)
+obj.sub <- ScaleData(obj.sub, features = all.genes)
+# PCA
+obj.sub <- RunPCA(obj.sub, features = VariableFeatures(object = obj.sub))
+
+pdf('/local/projects-t3/idea/ewild/etoh/INsElbow1.pdf',  height=6,width=15)
+ElbowPlot(obj.sub)
+dev.off()
+
+# Clustering
+obj.sub <- FindNeighbors(obj.sub, dims = 1:30)
+obj.sub <- FindClusters(obj.sub, resolution = 0.8)
+
+# UMAP
+obj.sub <- RunUMAP(obj.sub, dims = 1:30)
+
+obj.full <- obj
+obj <- obj.sub
+
+safe_colorblind_palette <-
+	c("#88CCEE", "#CC6677", "#DDCC77", "#117733", "#332288", "#AA4499",
+          "#44AA99", "#999933", "#882255", "#661100", "#6699CC", "#888888",
+	  "black" )
+
+#### Save Rdata
+# save(a, b, c, file = "stuff.RData")
+save (obj, obj.sub, obj.full, safe_colorblind_palette, file ="/local/projects-t3/idea/ewild/etoh/INeSPNsubset/iNeSPN_obj.sub.Rdata")
+
+
+
+
+
+# Assigning major_type (12.14.21)
+
+# Original object
+load("/local/projects-t3/idea/ewild/etoh/INeSPNsubset/iNeSPN_obj.sub.Rdata")
+obj.sub = obj
+
+Idents(obj.sub) = "seurat_clusters"
+major_type <- c("eSPN", "IN-PV", "DROP", "eSPN", "IN-Sst", "IN-PV", "Neurogenesis",
+"DROP", "IN-Sst", "Other_SPN", "IN-Chat", "IN-Chat", "DROP", "DROP", "DROP")
+
+names(major_type) <- levels(obj.sub)
+obj.sub <- RenameIdents(obj.sub, major_type)
+
+###################### SAVE THIS METADATA into major_type ###################
+
+obj.sub[["major_type"]] <- Idents(obj.sub)
+
+save (obj, obj.sub, obj.full, safe_colorblind_palette, file ="/local/projects-t3/idea/ewild/etoh/INeSPNsubset/iNeSPN_obj.sub_reclusterednamed.Rdata")
+
+##################### Move into integrating into obj.full immediately #########
+
+###################### Try/Test one at a time ##########################
+Idents(obj.full) = "major_type"
+inpv.fullsub <- subset(x=obj.full, idents = "IN-PV")
+ncol(inpv.fullsub)
+Idents(obj.sub) = "major_type"
+inpv.subsub <- subset(x=obj.sub, idents = "IN-PV")
+ncol(inpv.subsub)
+# 341 (IN-PV in obj.full)
+# 321 (IN-PV in obj.sub)
+
+obj.full, idents = which(obj.full@meta.data$major_type == "IN-PV") <-
+obj.sub, idents = which(obj.full@meta.data$major_type == "IN-PV")
+# Fail.
+
+obj.full@meta.data$final_major_type = c( WhichCells(object = obj.sub, Idents = obj.sub@meta.data$major_type == c("IN-PV", "IN-Sst",
+"eSPN", "IN-Chat", "Neurogenesis")), WhichCells(object = obj.full, Idents = obj.full@meta.data$major_type == c("iSPN", "dSPN",
+"AS", "OL", "Endo")))
+# Fail.
+
+######################## Try Merge ###################################
+
+# Looks like it will only work if I first remove the cells from obj.full and
+# then merge the two objects. Let's try that
+Idents(obj.full) = "major_type"
+obj.new <- subset(x = obj.full, idents =
+c("iSPN", "dSPN", "AS", "OL", "Endo", "MG", "OPC", "Mural", "Ependyma"))
+ncol(obj.new)
+# 14413 (+1799 = 16212)
+
+obj.new <- merge(x=obj.new, y=obj.sub, all.x=TRUE, all.y=TRUE)
+
+
+########## Subset Again to Drop "Drop" #######################
+
+obj.new <- subset(x = obj.new, idents =
+c("iSPN", "dSPN", "AS", "OL", "Endo", "MG", "OPC", "Mural", "Ependyma", "IN-PV", "IN-Sst",
+"eSPN", "IN-Chat", "Neurogenesis", "Other_SPN"))
+
+ncol(obj.new)
+# 15781
+
+Idents(obj.sub) = "major_type"
+drop.subsub <- subset(x=obj.sub, idents = "DROP")
+ncol(drop.subsub)
+# 431
+# 16212 - 431 = 15781
+# Bingo!
+
+
+save (obj.new, safe_colorblind_palette, file ="/local/projects-t3/idea/ewild/etoh/etoh_obj.new/etoh_obj.new_FinalClusters.Rdata")

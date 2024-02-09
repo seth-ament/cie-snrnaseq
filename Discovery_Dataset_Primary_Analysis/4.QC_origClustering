@@ -1,0 +1,93 @@
+
+R
+library(Seurat)
+library(tidyverse)
+library(ggplot2)
+library(cowplot)
+library(stringr)
+theme_set(theme_cowplot())
+
+setwd("/local/projects-t3/idea/ewild/etoh/Data_2023/noCellbender/rmdbl/rmdbl")
+
+obj = readRDS( "/autofs/burnsfs/projects-t3/idea/ewild/etoh/Data_2023/postCellbinder/combined.sct_rmdbl.rds" )
+
+################################# Add Metadata ########################################
+metadata <- obj@meta.data
+metadata$barcode <- rownames(metadata)
+metadata <- metadata %>% mutate(sample=substr(metadata$barcode, nchar(metadata$barcode)-1+1, nchar(metadata$barcode)))
+
+metadata <- metadata %>%
+  mutate(trt = case_when(sample == "1" ~ "air",
+                                sample == "2" ~ "air",
+                                sample == "3" ~ "air",
+                                sample == "4" ~ "air",
+                                sample == "5" ~ "etoh",
+                                sample == "6" ~ "etoh",
+                                sample == "7" ~ "etoh",
+                                sample == "8" ~ "etoh"))
+
+############################ Remove Doublets #############################
+  obj_sub = subset(obj, subset = scDblFinder.class == "singlet")
+
+################################ Additional QC ############################s
+# Add mt data
+obj$PercMito <- PercentageFeatureSet(object = obj, pattern = "^mt-", assay = "RNA")
+obj$PercMito_SCT <- PercentageFeatureSet(object = obj, pattern = "^mt-", assay = "SCT")
+
+# Filter for QC
+# The mt-content is NOT trt based -- so cannot be biological to the treatment state
+obj <- subset(obj, subset = nFeature_SCT > 200 & nFeature_SCT < 5000 & PercMito < 20)
+
+
+################################# Clustering ####################################
+
+DefaultAssay(obj) = 'integrated'
+
+obj <- ScaleData( obj, verbose = FALSE)
+obj <- RunPCA( obj , npcs = 50, verbose = FALSE)
+obj <- RunUMAP( obj , reduction = "pca", dims = 1:30)
+obj <- FindNeighbors( obj , reduction = "pca", dims = 1:30)
+obj <- FindClusters( obj , resolution = 0.5)
+
+DefaultAssay(obj) = 'RNA'
+obj = NormalizeData(obj)
+
+pdf('umap_npcs50_res0.5_rmdbl_QC.pdf')
+DimPlot( obj , label = T ) + NoLegend()
+dev.off()
+
+features = c('Ebf1','Drd1','Drd2','Adora2a','Otof','Col11a1',
+	     'Slc1a3','Rorb','Mog','Aspa','Chat','Tacr1',
+	     'Kit','Pvalb','Sst','Npy','C1qc','Cx3cr1',
+	     'Pdgfra','Vxn','Pdgfrb','Vtn','Flt1','Slco1a4',
+	     'Cfap299','Dnah12', 'Rsph1', 'Gm973')
+
+pdf('DotPlot_Markers_res0.5_byCluster.pdf',
+    height=6,width=15)
+plot <- DotPlot( obj , features = features )
+plot + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+dev.off()
+
+# subset trt
+metadata = obj@meta.data
+meta_air  = metadata %>% filter(metadata$trt == "air")
+meta_etoh = metadata %>% filter(metadata$trt == "etoh")
+
+pdf("ClustersBySampleAir.pdf")
+ggplot(meta_air, aes(factor(seurat_clusters), fill = factor(sample))) +
+    geom_bar(position = "dodge2") +
+    theme(axis.text.x = element_text(angle=45))
+dev.off()
+
+pdf("ClustersBySampleEtOH.pdf")
+ggplot(meta_etoh, aes(factor(seurat_clusters), fill = factor(sample))) +
+    geom_bar(position = "dodge2") +
+    theme(axis.text.x = element_text(angle=45))
+dev.off()
+
+## Freq table
+table(obj$seurat_clusters, obj$sample)
+
+table(obj$sample)
+
+saveRDS( obj , file = 'combined.sct_etoh_rmDbl_fullQC_clustered_npsc50_res0.5.rds' )

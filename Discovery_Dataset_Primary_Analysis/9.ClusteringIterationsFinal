@@ -1,0 +1,50 @@
+
+
+R
+library(Seurat)
+library(tidyverse)
+library(ggplot2)
+library(cowplot)
+library(stringr)
+theme_set(theme_cowplot())
+
+setwd("/local/projects-t3/idea/ewild/etoh/Data_2023/noCellbender/rmdbl/rmdbl_QC/RecombineClusters/w_eSPN")
+
+obj = readRDS( "Recombine_drop_R1res0.5_drop_R2res0.2_drop_w_eSPN_QSUB_R1_R2.rds")
+
+################################# Assign Major Type ####################################
+
+# Add major_type to metadata
+metadata <- obj@meta.data
+metadata <- metadata %>%
+   mutate(major_type = seurat_clusters)
+
+   metadata$major_type <- recode(metadata$major_type, '0'="Oligo", '1'="iSPN", '2' = "Astro", '3'="dSPN",'4'="drop", '5'="Endo")
+   metadata$major_type <- recode(metadata$major_type, '6'="eSPN", '7'="Poly", '8'="MG", '9'="Mural", '10'="IN-PV")
+   metadata$major_type <- recode(metadata$major_type,  '11'="IN-SST", '12'="IN-CHAT", '13'="Ependy")
+
+
+
+obj$major_type = metadata$major_type
+
+Idents(obj) <- "major_type"
+pdf('umap_recombinedclusters_IDedCLusters_new_umap_byMajorTypeR2res0.2.pdf')
+DimPlot( obj , label = T, raster=FALSE )
+dev.off()
+
+############################### Drop Cluster drop (C4) ###############################
+
+obj = subset(obj, idents = "drop", invert = TRUE)
+
+
+Idents(obj) <- "major_type"
+pdf('umap_recombinedclusters_IDedCLusters_new_umap_byMajorType_R2_DropC4.pdf')
+DimPlot( obj, label = T, raster=FALSE )
+dev.off()
+
+## Freq table
+table(obj$seurat_clusters, obj.test$sample)
+table(obj$sample)
+
+
+saveRDS (obj, "Recombine_drop_R1res0.5_drop_R2res0.2_drop_w_eSPN_QSUB_R2_Final.rds")

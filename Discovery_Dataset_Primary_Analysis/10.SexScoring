@@ -1,0 +1,71 @@
+R
+library(Seurat)
+library(tidyverse)
+library(ggplot2)
+library(cowplot)
+library(stringr)
+theme_set(theme_cowplot())
+
+setwd("/autofs/burnsfs/projects-t3/idea/ewild/etoh/Data_2023/noCellbender/rmdbl/rmdbl_QC/RecombineClusters/w_eSPN/R2")
+
+obj = readRDS( "Recombine_drop_R1res0.5_drop_R2res0.2_drop_w_eSPN_R2_Final.rds" )
+
+# Add major_type to metadata
+metadata <- obj@meta.data
+metadata <- metadata %>%
+   mutate(sample_number = sample)
+obj$sample_number = metadata$sample_number
+
+saveRDS (obj, "Recombine_drop_R1res0.5_drop_R2res0.2_drop_w_eSPN_R2_Final.rds")
+
+###
+
+
+setwd("/autofs/burnsfs/projects-t3/idea/ewild/etoh/Data_2023/noCellbender/rmdbl/rmdbl_QC/RecombineClusters/w_eSPN/R2")
+
+obj = readRDS( "Recombine_drop_R1res0.5_drop_R2res0.2_drop_w_eSPN_R2_Final.rds" )
+
+source('/home/sament/ALRA/alra.R')
+Idents(obj) = "major_type"
+types = levels(obj)
+
+# impute
+
+alra.list = list()
+
+for( i in 1:length(types) ) {
+  cat( i , '\n' )
+  tmp = subset( obj , idents = types[i] )
+  norm = t(as.matrix(LayerData(tmp,layer='data')))
+  alra.out = alra( norm )
+  alra.list[[i]] = alra.out[[3]]
+}
+
+# memory issue
+# saveRDS( alra.list , file = 'alra_list.rds' )
+
+names(alra.list) = types
+
+sex.anno = rep( NA , ncol(obj) )
+names(sex.anno) = colnames(obj)
+
+for( i in 1:length(types) ) {
+  cat( types[i] , '\n' )
+  tmp = subset( obj , idents = types[i] )
+  if( i == 1 ) Xist = LayerData(tmp,layer='data',features='Xist')
+  if( i > 1 ) Xist = alra.list[[i]][,'Xist']
+  sex = rep('' , ncol(tmp) )
+  for( d in 1:26 ) {
+    Xist.d = Xist[ which( tmp$sample_number == d ) ]
+    med = median(Xist.d)
+    sex.d = rep( 'Male' , length(Xist.d) )
+    sex.d[ Xist.d > med ] = 'Female'
+    sex[ which( tmp$sample_number == d ) ] = sex.d
+  }
+  sex.anno[ Idents(obj) == types[i] ] = sex
+}
+
+obj = AddMetaData( obj , sex.anno , 'sex' )
+
+saveRDS( alra.list , file = 'alra_list_taketwo.rds' )
+saveRDS( obj , file = 'etoh_obj_wsex_taketwo.rds')

@@ -1,0 +1,42 @@
+conda activate /autofs/burnsfs/projects-t3/idea/amentlab_software/conda_envs/seurat5
+
+R
+library( Seurat )
+library( edgeR )
+library( Signac )
+
+setwd("/autofs/burnsfs/projects-t3/idea/ewild/etoh/Data_2023/noCellbender/rmdbl/rmdbl_QC/RecombineClusters/w_eSPN/R2/pseudobulk")
+obj = readRDS('/autofs/burnsfs/projects-t3/idea/ewild/etoh/Data_2023/noCellbender/rmdbl/rmdbl_QC/RecombineClusters/w_eSPN/R2/etoh_final_obj_wsex.rds')
+
+# y <- Seurat2PB(obj, sample="sample", cluster="major_type") # no dice
+
+meta = obj@meta.data
+meta$donor_id = factor( paste( meta$sample , meta$sex , sep = "_") )
+obj$donor_id = meta$donor_id
+
+DefaultAssay(obj) = 'RNA'
+
+types = levels(obj)
+
+elist = list()
+
+donors = unique( obj$donor_id )
+
+for( i in 1:length(types) ) {
+  cat( types[i] , '\n' )
+  expr = matrix( 0 , ncol = length(donors) , nrow = nrow(obj) )
+  sub = subset( obj , idents = types[i] )
+  for( j in 1:length(donors) ) {
+    idx = which( sub$donor_id == donors[j] )
+    if(length(idx)==0) next
+    sub.j = subset( sub , cells = idx )
+    expr[,j] = rowSums( GetAssayData( sub.j , slot = 'counts' ) )
+    rownames(expr) = rownames(obj)
+    colnames(expr) = donors
+  }
+  elist[[i]] = expr
+}
+
+names(elist) = types
+
+saveRDS( elist , file = 'etoh_pseudobulk_counts.rds')

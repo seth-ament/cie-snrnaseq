@@ -1,0 +1,127 @@
+
+R
+library(Seurat)
+library(tidyverse)
+library(ggplot2)
+library(cowplot)
+library(stringr)
+theme_set(theme_cowplot())
+
+setwd("/local/projects-t3/idea/ewild/etoh/Data_2023/noCellbender/rmdbl/rmdbl_QC")
+
+obj = readRDS( "combined.sct_etoh_rmDbl_fullQC_clustered_npsc50_res0.5.rds" )
+
+############### Assign new clusters ################
+
+# Neuron_Other
+metadata <- obj@meta.data
+metadata <- metadata %>%
+   mutate(neuron_other = seurat_clusters)
+
+metadata$neuron_other <- recode(metadata$neuron_other, '0'="drop", '1'="neuron", '2' = "neuron", '3'="other",'4'="drop", '5'="other")
+metadata$neuron_other <- recode(metadata$neuron_other, '6'="drop", '7'="neuron", '8'="other", '9'="other", '10'="neuron")
+metadata$neuron_other <- recode(metadata$neuron_other,  '11'="drop", '12'="neuron", '13'="other", '14'="neuron",'15'="other")
+metadata$neuron_other <- recode(metadata$neuron_other, '16'= "other", '17'="other", '18'="other", '19'="neuron", '20'= "neuron")
+metadata$neuron_other <- recode(metadata$neuron_other, '21'= "drop", '22'="other", '23'= "other", '24'= "other", '25'="other", '26'="drop", '27'= "other")
+
+obj$neuron_other = metadata$neuron_other
+obj.orig = obj
+
+########### Drop Explanation # PPT: 10.10.23 Weekly Meeting
+# 0 -- low level iSPN/dSPN markers indicates low quality and/or doublet cells
+# 4
+# 6
+# 11
+# 21 -- same but with atro/olig markers
+# 26 same
+
+############################### Neurons Separately ####################################
+setwd("/autofs/burnsfs/projects-t3/idea/ewild/etoh/Data_2023/noCellbender/rmdbl/rmdbl_QC/neuron_clustering/")
+obj = subset(obj.orig, subset = neuron_other == "neuron")
+
+DefaultAssay(obj) = 'integrated'
+
+obj <- ScaleData( obj, verbose = FALSE)
+obj <- RunPCA( obj , npcs = 50, verbose = FALSE)
+obj <- RunUMAP( obj , reduction = "pca", dims = 1:30)
+obj <- FindNeighbors( obj , reduction = "pca", dims = 1:30)
+obj <- FindClusters( obj , resolution = 0.5)
+
+DefaultAssay(obj) = 'RNA'
+obj = NormalizeData(obj)
+
+pdf('umap_npcs50_res0.5_rmdbl_QC_neuron_only_2.pdf')
+DimPlot( obj , label = T ) + NoLegend()
+dev.off()
+
+features = c('Ebf1','Drd1','Drd2','Adora2a','Otof','Col11a1',
+	     'Slc1a3','Rorb','Mog','Aspa','Chat','Tacr1',
+	     'Kit','Pvalb','Sst','Npy','C1qc','Cx3cr1',
+	     'Pdgfra','Vxn','Pdgfrb','Vtn','Flt1','Slco1a4',
+	     'Cfap299','Dnah12', 'Rsph1', 'Gm973')
+
+pdf('DotPlot_Markers_res0.5_byCluster_neuron_only.pdf',
+    height=6,width=15)
+plot <- DotPlot( obj , features = features )
+plot + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+dev.off()
+
+# subset trt
+metadata = obj@meta.data
+meta_air  = metadata %>% filter(metadata$trt == "air")
+meta_etoh = metadata %>% filter(metadata$trt == "etoh")
+
+pdf("ClustersBySampleAir_neuron_only.pdf")
+ggplot(meta_air, aes(factor(seurat_clusters), fill = factor(sample))) +
+    geom_bar(position = "dodge2") +
+    theme(axis.text.x = element_text(angle=45))
+dev.off()
+
+pdf("ClustersBySampleEtOH_neuron_only.pdf")
+ggplot(meta_etoh, aes(factor(seurat_clusters), fill = factor(sample))) +
+    geom_bar(position = "dodge2") +
+    theme(axis.text.x = element_text(angle=45))
+dev.off()
+
+## Freq table
+table(obj$seurat_clusters, obj$sample)
+
+table(obj$sample)
+
+saveRDS (obj, "neuron_clustering.rds")
+
+################################# Patch vs Matrix ################################
+# https://www.sciencedirect.com/science/article/pii/S2211124719315967
+# Patch:  Pde1c and Kremen1
+# Matrix: Epha4 and Sv2b
+
+Idents(obj) = obj$seurat_clusters
+
+features_pm = c('Pde1c','Kremen1', 'Epha4','Sv2b')
+
+pdf('DotPlot_PatchMatrixMarkers_NeuronOnly_byCluster.pdf',
+    height=6,width=15)
+plot <- DotPlot( obj , features = features_pm )
+plot + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+dev.off()
+
+################################# Assign Major Type ####################################
+
+# Add major_type to metadata
+metadata <- obj@meta.data
+metadata <- metadata %>%
+   mutate(major_type = seurat_clusters)
+
+metadata$major_type <- recode(metadata$major_type, '0'="dSPN", '1'="iSPN", '2' = "dSPN", '3'="iSPN",'4'="dSPN", '5'="iSPN")
+metadata$major_type <- recode(metadata$major_type, '6'="dSPN", '7'="iSPN", '8'="IN-Intermediate_kit", '9'="eSPN", '10'="eSPN")
+metadata$major_type <- recode(metadata$major_type,  '11'="IN-Intermediate_sst", '12'="IN-PV", '13'="IN-SST", '14'="IN-CHAT",'15'="eSPN_drd2")
+
+obj$major_type = metadata$major_type
+
+Idents(obj) <- "major_type"
+pdf('UMAP_byMajorType_res0.5_R1.pdf')
+DimPlot( obj , label = T, raster=FALSE )
+dev.off()
+
+
+saveRDS (obj, "neuron_clustering.rds")

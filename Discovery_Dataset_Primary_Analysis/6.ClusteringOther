@@ -1,0 +1,178 @@
+
+R
+library(Seurat)
+library(tidyverse)
+library(ggplot2)
+library(cowplot)
+library(stringr)
+theme_set(theme_cowplot())
+
+setwd("/local/projects-t3/idea/ewild/etoh/Data_2023/noCellbender/rmdbl/rmdbl_QC")
+
+obj = readRDS( "combined.sct_etoh_rmDbl_fullQC_clustered_npsc50_res0.5.rds" )
+
+############### Assign new clusters ################
+
+# Neuron_Other
+metadata <- obj@meta.data
+metadata <- metadata %>%
+   mutate(neuron_other = seurat_clusters)
+
+metadata$neuron_other <- recode(metadata$neuron_other, '0'="drop", '1'="neuron", '2' = "neuron", '3'="other",'4'="drop", '5'="other")
+metadata$neuron_other <- recode(metadata$neuron_other, '6'="drop", '7'="neuron", '8'="other", '9'="other", '10'="neuron")
+metadata$neuron_other <- recode(metadata$neuron_other,  '11'="drop", '12'="neuron", '13'="other", '14'="neuron",'15'="other")
+metadata$neuron_other <- recode(metadata$neuron_other, '16'= "other", '17'="other", '18'="other", '19'="neuron", '20'= "neuron")
+metadata$neuron_other <- recode(metadata$neuron_other, '21'= "drop", '22'="other", '23'= "other", '24'= "other", '25'="other", '26'="drop", '27'= "other")
+
+obj$neuron_other = metadata$neuron_other
+obj.orig = obj
+
+########### Drop Explanation # PPT: 10.10.23 Weekly Meeting
+# 0 -- low level iSPN/dSPN markers indicates low quality and/or doublet cells
+# 4
+# 6
+# 11
+# 21 -- same but with atro/olig markers
+# 26 same
+
+
+############################### Others Separately ####################################
+setwd("/autofs/burnsfs/projects-t3/idea/ewild/etoh/Data_2023/noCellbender/rmdbl/rmdbl_QC/other_clustering/")
+obj = subset(obj.orig, subset = neuron_other == "other")
+
+DefaultAssay(obj) = 'integrated'
+
+obj <- ScaleData( obj, verbose = FALSE)
+obj <- RunPCA( obj , npcs = 50, verbose = FALSE)
+obj <- RunUMAP( obj , reduction = "pca", dims = 1:30)
+obj <- FindNeighbors( obj , reduction = "pca", dims = 1:30)
+obj <- FindClusters( obj , resolution = 0.5)
+
+DefaultAssay(obj) = 'RNA'
+obj = NormalizeData(obj)
+
+pdf('umap_npcs50_res0.5_rmdbl_QC_other)_clustering.pdf')
+DimPlot( obj , label = T ) + NoLegend()
+dev.off()
+
+features = c('Ebf1','Drd1','Drd2','Adora2a','Otof','Col11a1',
+	     'Slc1a3','Rorb','Mog','Aspa','Chat','Tacr1',
+	     'Kit','Pvalb','Sst','Npy','C1qc','Cx3cr1',
+	     'Pdgfra','Vxn','Pdgfrb','Vtn','Flt1','Slco1a4',
+	     'Cfap299','Dnah12', 'Rsph1', 'Gm973')
+
+pdf('DotPlot_Markers_res0.5_byCluster_other_clustering.pdf',
+    height=6,width=15)
+plot <- DotPlot( obj , features = features )
+plot + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+dev.off()
+
+# subset trt
+metadata = obj@meta.data
+meta_air  = metadata %>% filter(metadata$trt == "air")
+meta_etoh = metadata %>% filter(metadata$trt == "etoh")
+
+pdf("ClustersBySampleAir_other_clustering.pdf")
+ggplot(meta_air, aes(factor(seurat_clusters), fill = factor(sample))) +
+    geom_bar(position = "dodge2") +
+    theme(axis.text.x = element_text(angle=45))
+dev.off()
+
+pdf("ClustersBySampleEtOH_other_clustering.pdf")
+ggplot(meta_etoh, aes(factor(seurat_clusters), fill = factor(sample))) +
+    geom_bar(position = "dodge2") +
+    theme(axis.text.x = element_text(angle=45))
+dev.off()
+
+## Freq table
+table(obj$seurat_clusters, obj$sample)
+
+table(obj$sample)
+
+
+saveRDS (obj, "other_clustering.rds")
+
+
+################################ Assign MajorType ##############################
+
+setwd("/autofs/burnsfs/projects-t3/idea/ewild/etoh/Data_2023/noCellbender/rmdbl/rmdbl_QC/other_clustering/")
+obj = readRDS("other_clustering.rds")
+
+################################# Assign Major Type ####################################
+
+# Add major_type to metadata
+metadata <- obj@meta.data
+metadata <- metadata %>%
+   mutate(major_type = seurat_clusters)
+
+metadata$major_type <- recode(metadata$major_type, '0'="Oligo", '1'="Astro", '2' = "Oligo", '3'="Endo",'4'="Astro", '5'="Poly_astro")
+metadata$major_type <- recode(metadata$major_type, '6'="Astro", '7'="Vxn_1", '8'="MG", '9'="Oligo", '10'="MG_light")
+metadata$major_type <- recode(metadata$major_type,  '11'="Mural", '12'="Endo_Mural", '13'="Astro", '14'="Vxn_2",'15'="Oligo")
+metadata$major_type <- recode(metadata$major_type,  '16'="Astro_rorb", '17'="Astro_slc", '18'="Ependy", '19'="Oligo_MG",'20'="Astro_Oligo")
+metadata$major_type <- recode(metadata$major_type,  '21'="Astro_MG", '22'="Astro_MG_Poly")
+
+obj$major_type = metadata$major_type
+
+Idents(obj) <- "major_type"
+pdf('UMAP_byMajorType_OtherCells.pdf')
+DimPlot( obj , label = T, raster=FALSE )
+dev.off()
+
+
+saveRDS (obj, "other_clustering.rds")
+
+
+
+
+######################### Explore Vxn CLuster
+cluster_vxn1_markers <- FindMarkers(obj, ident.1 = "Vxn_1", min.pct = 0.25)
+head(cluster_vxn1_markers, n = 10)
+
+cluster_vxn2_markers <- FindMarkers(obj, ident.1 = "Vxn_2", min.pct = 0.25)
+head(cluster_vxn2_markers, n = 10)
+
+
+features = c('Dcn', 'Vxn', 'Igf2','Igfbp2', 'Col1a2')
+
+pdf('DotPlot_Markers_FibroblastLikeDcn_other_clustering.pdf',
+    height=6,width=15)
+plot <- DotPlot( obj , features = features )
+plot + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+dev.off()
+
+
+setwd("/autofs/burnsfs/projects-t3/idea/ewild/etoh/Data_2023/noCellbender/rmdbl/rmdbl_QC/neuron_clustering/")
+Idents(obj_neuron) = obj_neuron$major_type
+pdf('DotPlot_Markers_FibroblastLikeDcn_neuron_clustering.pdf',
+    height=6,width=15)
+plot <- DotPlot( obj_neuron , features = features )
+plot + theme(axis.text.x = element_text(angle = 45, hjust = 1))
+dev.off()
+
+
+################ UMAP of only significant cells
+other = readRDS("/autofs/burnsfs/projects-t3/idea/ewild/etoh/Data_2023/noCellbender/rmdbl/rmdbl_QC/other_clustering/other_clustering.rds")
+other = subset(other, major_type == c("MG", "Endo", "Oligo", "Astro", "Mural", "Ependy"))
+
+
+Idents(other) <- "major_type"
+pdf('UMAP_byMajorType_OtherCells_onlyMajorCelltypes.pdf')
+DimPlot( other , label = T )
+dev.off()
+
+obj = other
+
+DefaultAssay(obj) = 'integrated'
+
+obj <- ScaleData( obj, verbose = FALSE)
+obj <- RunPCA( obj , npcs = 50, verbose = FALSE)
+obj <- RunUMAP( obj , reduction = "pca", dims = 1:30)
+obj <- FindNeighbors( obj , reduction = "pca", dims = 1:30)
+obj <- FindClusters( obj , resolution = 0.5)
+
+DefaultAssay(obj) = 'RNA'
+obj = NormalizeData(obj)
+
+pdf('umap_npcs50_res0.5_rmdbl_QC_other_AfterDroppingNonMajorandReclusting)_clustering.pdf')
+DimPlot( obj , label = T ) + NoLegend()
+dev.off()

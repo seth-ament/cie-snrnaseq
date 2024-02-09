@@ -1,0 +1,43 @@
+module load sge
+qlogin -P sament-lab -l mem_free=30G -q interactive.q
+conda activate /local/projects-t3/idea/ewild/software/Rlib/r_4_0
+
+library( Seurat )
+
+setwd("/local/projects-t3/idea/ewild/etoh/Data_2023")
+
+dir = Sys.glob(file.path("/local/projects-t3/ESA10", "mDorsalStriatum*", "ANALYSIS", "*", "*", "outs", "filtered_feature_bc_matrix"))
+# vdir = Sys.glob('../counts/*/filtered_feature_bc_matrix') #seth
+# dir = Sys.glob('../mDorsalStriatum*/ANALYSIS/*/*/outs/filtered_feature_bc_matrix')
+
+samples = gsub('/filtered_feature_bc_matrix','',dir)
+
+library(stringr)
+
+substrRight <- function(x, n){
+  substr(x, nchar(x)-n+1, nchar(x))
+}
+
+samples = substrRight(samples, 31)
+
+# samples = gsub('../','',samples)
+
+seuratObjs = list()
+
+n = length(dir)
+for( i in 1:n ) {
+  cat( i , '\n' )
+  mtx = Read10X( dir[i] )
+  if( is.list(mtx) == T ) {
+    obj = CreateSeuratObject( mtx[[1]] )
+    ab = CreateAssayObject( mtx[[2]] )
+    obj[['ab']] = ab
+  }
+  if( is.list(mtx) == F )
+    obj = CreateSeuratObject( mtx )
+  seuratObjs[[i]] = obj
+}
+
+names(seuratObjs) = samples
+
+saveRDS( seuratObjs , file = 'seuratObjs.rds' )
